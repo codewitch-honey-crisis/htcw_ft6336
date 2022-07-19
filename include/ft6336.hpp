@@ -24,6 +24,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
+#pragma once
 #include <Arduino.h>
 #include <Wire.h>
 namespace arduino {
@@ -92,6 +93,7 @@ class ft6336 final {
     TwoWire& m_i2c;
     uint32_t m_last_read_ts;
     uint8_t m_interval;
+    bool m_initialized=false;
     point m_points[2];
     bool m_updated;
     bool m_changed;
@@ -151,8 +153,16 @@ class ft6336 final {
     constexpr static const uint16_t height = Height;
     constexpr static const int8_t pin_int = PinInt;
     constexpr static const uint8_t address = Address;
-    ft6336(TwoWire& i2c = Wire) : m_i2c(i2c), m_last_read_ts(0), m_interval(0), m_updated(false),m_changed(false),m_point_count(0),m_point_0_finger(0),m_rotation(0) {
+    ft6336(TwoWire& i2c = Wire) : m_i2c(i2c), m_last_read_ts(0), m_interval(0), m_initialized(false), m_updated(false),m_changed(false),m_point_count(0),m_point_0_finger(0),m_rotation(0) {
         m_points[0].x = m_points[0].y = m_points[1].x = m_points[1].y = 65535;
+    }
+    inline bool initialized() const { return m_initialized; }
+    bool initialize() {
+        if(!m_initialized) {
+            pinMode(pin_int,INPUT_PULLUP);
+            m_initialized=true;
+        }
+        return true;
     }
     inline void interrupt_enabled(bool value) {
         reg(REG_INTERRUPT_MODE, value);
@@ -200,6 +210,9 @@ class ft6336 final {
         }
     }
     bool update() {
+        if(!initialize()) {
+            return false;
+        }
         if (!m_interval) {
             m_interval = interval();
         }
