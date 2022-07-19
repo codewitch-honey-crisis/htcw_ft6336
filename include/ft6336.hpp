@@ -140,8 +140,9 @@ class ft6336 final {
                 pt.y = pt.x;
                 break;
             case 3:
-                pt.y = height-pt.y-1;
-                pt.x = width-pt.x-1;
+                tmp = pt.x;
+                pt.x = height-pt.y-1;
+                pt.y = pt.x;
             default:
                 break;
             
@@ -186,8 +187,8 @@ class ft6336 final {
     inline void rotation(uint8_t value) {
         m_rotation = value & 3;
     }
-    void xy(uint16_t* out_x, uint16_t* out_y) const {
-        if(!m_updated) return;
+    bool xy(uint16_t* out_x, uint16_t* out_y) const {
+        if(!m_updated) return false;
         if(m_point_count>0) {
             if(out_x!=nullptr) {
                 *out_x = m_points[0].x;
@@ -195,10 +196,12 @@ class ft6336 final {
             if(out_y!=nullptr) {
                 *out_y = m_points[0].y;
             }
+            return true;
         }
+        return false;
     }
-    void xy2(uint16_t* out_x, uint16_t* out_y) const {
-        if(!m_updated) return;
+    bool xy2(uint16_t* out_x, uint16_t* out_y) const {
+        if(!m_updated) return false;
         if(m_point_count>1) {
             if(out_x!=nullptr) {
                 *out_x = m_points[1].x;
@@ -206,7 +209,9 @@ class ft6336 final {
             if(out_y!=nullptr) {
                 *out_y = m_points[1].y;
             }
+            return true;
         }
+        return false;
     }
     bool update() {
         if(!initialize()) {
