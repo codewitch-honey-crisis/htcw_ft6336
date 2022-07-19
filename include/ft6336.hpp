@@ -140,9 +140,8 @@ class ft6336 final {
                 pt.y = pt.x;
                 break;
             case 3:
-                tmp = pt.x;
-                pt.x = height-pt.y-1;
-                pt.y = pt.x;
+                pt.y = height-pt.y-1;
+                pt.x = width-pt.x-1;
             default:
                 break;
             
