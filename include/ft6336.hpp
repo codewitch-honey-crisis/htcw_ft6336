@@ -28,7 +28,7 @@ SOFTWARE.
 #include <Arduino.h>
 #include <Wire.h>
 namespace arduino {
-template <uint16_t Width, uint16_t Height, int8_t PinInt, uint8_t Address = 0x38>
+template <uint16_t Width, uint16_t Height, int8_t PinInt = -1, uint8_t Address = 0x38>
 class ft6336 final {
     constexpr static const uint8_t REG_DEVICE_MODE = 0x00;
     constexpr static const uint8_t REG_GESTURE_ID = 0x01;
