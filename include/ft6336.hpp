@@ -159,12 +159,15 @@ class ft6336 final {
     inline bool initialized() const { return m_initialized; }
     bool initialize() {
         if(!m_initialized) {
-            pinMode(pin_int,INPUT_PULLUP);
+            if(pin_int!=-1) {
+                pinMode(pin_int,INPUT_PULLUP);
+            }
             m_initialized=true;
         }
         return true;
     }
     inline void interrupt_enabled(bool value) {
+        if(value==true && pin_int==-1) return false;
         reg(REG_INTERRUPT_MODE, value);
     }
     inline bool interrupt_enabled() const {
