@@ -167,7 +167,7 @@ class ft6336 final {
         return true;
     }
     inline void interrupt_enabled(bool value) {
-        if(value==true && pin_int==-1) return false;
+        if(value==true && pin_int==-1) return;
         reg(REG_INTERRUPT_MODE, value);
     }
     inline bool interrupt_enabled() const {
