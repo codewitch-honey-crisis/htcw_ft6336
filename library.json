@@ -1,6 +1,6 @@
 {
     "name": "htcw_ft6336",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "description": "Provides support for the FT6336 capacitive touch panel",
     "keywords": ["touch", "capacitive", "touch-panel", "lcd"],
     "authors": {
@@ -8,7 +8,7 @@
         "homepage": "https://www.codeproject.com/Members/code-witch"
     },
     "license": "MIT",
-    "frameworks": ["arduino"],
+    "frameworks": ["arduino", "espidf"],
     "platforms": "*",
     "repository":
     {

@@ -1,10 +1,24 @@
-#pragma once
-// copyright (C) 2022 by honey the codewitch
-// derived from the M5 Stack Core2 code: (license below)
+// Derived from Adafruit's FT6236 lib
+// https://github.com/DustinWatts/FT6236
+// Original license below:
+/*
+This is a library for the FT6236 touchscreen controller by FocalTech.
+The FT6236 and FT6236u work the same way.
+A lot of this library is originally written by Limor Fried/Ladyada.
+Because Adafruit invests time and resources providing this open source code,
+please support Adafruit and open-source hardware by purchasing
+products from Adafruit!
+@section author Author
+Written by Limor Fried/Ladyada for Adafruit Industries.
+@section license License
+MIT license, all text above must be included in any redistribution
+*/
+// Portions derived from FT6X36-IDF https://github.com/martinberlin/FT6X36-IDF
+// Original license below:
 /*
 MIT License
 
-Copyright (c) 2020 M5Stack
+Copyright (c) 2019 strange_v
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -25,244 +39,271 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 #pragma once
+#if __has_include(<Arduino.h>)
 #include <Arduino.h>
 #include <Wire.h>
 namespace arduino {
-template <uint16_t Width, uint16_t Height, int8_t PinInt = -1, uint8_t Address = 0x38>
+#else
+#include <esp_timer.h>
+#include <inttypes.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "driver/gpio.h"
+#include "driver/i2c.h"
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
+namespace esp_idf {
+#endif
+
+template <uint16_t Width, uint16_t Height, uint8_t Threshhold = 128, uint8_t Address = 0x38>
 class ft6336 final {
-    constexpr static const uint8_t REG_DEVICE_MODE = 0x00;
-    constexpr static const uint8_t REG_GESTURE_ID = 0x01;
-    constexpr static const uint8_t REG_NUM_TOUCHES = 0x02;
-    constexpr static const uint8_t REG_P1_XH = 0x03;
-    constexpr static const uint8_t REG_P1_XL = 0x04;
-    constexpr static const uint8_t REG_P1_YH = 0x05;
-    constexpr static const uint8_t REG_P1_YL = 0x06;
-    constexpr static const uint8_t REG_P1_WEIGHT = 0x07;
-    constexpr static const uint8_t REG_P1_MISC = 0x08;
-    constexpr static const uint8_t REG_P2_XH = 0x09;
-    constexpr static const uint8_t REG_P2_XL = 0x0A;
-    constexpr static const uint8_t REG_P2_YH = 0x0B;
-    constexpr static const uint8_t REG_P2_YL = 0x0C;
-    constexpr static const uint8_t REG_P2_WEIGHT = 0x0D;
-    constexpr static const uint8_t REG_P2_MISC = 0x0E;
-    constexpr static const uint8_t REG_THRESHHOLD = 0x80;
-    constexpr static const uint8_t REG_FILTER_COEF = 0x85;
-    constexpr static const uint8_t REG_CTRL = 0x86;
-    constexpr static const uint8_t REG_TIME_ENTER_MONITOR = 0x87;
-    constexpr static const uint8_t REG_TOUCHRATE_ACTIVE = 0x88;
-    constexpr static const uint8_t REG_TOUCHRATE_MONITOR = 0x89;  // value in ms
-    constexpr static const uint8_t REG_RADIAN_VALUE = 0x91;
-    constexpr static const uint8_t REG_OFFSET_LEFT_RIGHT = 0x92;
-    constexpr static const uint8_t REG_OFFSET_UP_DOWN = 0x93;
-    constexpr static const uint8_t REG_DISTANCE_LEFT_RIGHT = 0x94;
-    constexpr static const uint8_t REG_DISTANCE_UP_DOWN = 0x95;
-    constexpr static const uint8_t REG_DISTANCE_ZOOM = 0x96;
-    constexpr static const uint8_t REG_LIB_VERSION_H = 0xA1;
-    constexpr static const uint8_t REG_LIB_VERSION_L = 0xA2;
-    constexpr static const uint8_t REG_CHIPID = 0xA3;
-    constexpr static const uint8_t REG_INTERRUPT_MODE = 0xA4;
-    constexpr static const uint8_t REG_POWER_MODE = 0xA5;
-    constexpr static const uint8_t REG_FIRMWARE_VERSION = 0xA6;
-    constexpr static const uint8_t REG_PANEL_ID = 0xA8;
-    constexpr static const uint8_t REG_STATE = 0xBC;
-
-    constexpr static const uint8_t PMODE_ACTIVE = 0x00;
-    constexpr static const uint8_t PMODE_MONITOR = 0x01;
-    constexpr static const uint8_t PMODE_STANDBY = 0x02;
-    constexpr static const uint8_t PMODE_HIBERNATE = 0x03;
-
-    /* Possible values returned by GEST_ID_REG */
-    constexpr static const uint8_t GEST_ID_NO_GESTURE = 0x00;
-    constexpr static const uint8_t GEST_ID_MOVE_UP = 0x10;
-    constexpr static const uint8_t GEST_ID_MOVE_RIGHT = 0x14;
-    constexpr static const uint8_t GEST_ID_MOVE_DOWN = 0x18;
-    constexpr static const uint8_t GEST_ID_MOVE_LEFT = 0x1C;
-    constexpr static const uint8_t GEST_ID_ZOOM_IN = 0x48;
-    constexpr static const uint8_t GEST_ID_ZOOM_OUT = 0x49;
-
-    constexpr static const uint8_t VENDID = 0x11;
-    constexpr static const uint8_t FT6206_CHIPID = 0x06;
-    constexpr static const uint8_t FT6236_CHIPID = 0x36;
+    constexpr static const uint8_t TOUCH_REG_XL = 0x04;
+    constexpr static const uint8_t TOUCH_REG_XH = 0x03;
+    constexpr static const uint8_t TOUCH_REG_YL = 0x06;
+    constexpr static const uint8_t TOUCH_REG_YH = 0x05;
+    constexpr static const uint8_t TOUCH_REG_NUMTOUCHES = 0x2;
+    constexpr static const uint8_t TOUCH_REG_THRESHHOLD = 0x80;
+    constexpr static const uint8_t TOUCH_REG_VENDID = 0xA8;
+    constexpr static const uint8_t TOUCH_REG_CHIPID = 0xA3;
+    constexpr static const uint8_t FT6336_VENDID = 0x11;
+    constexpr static const uint8_t FT6206_CHIPID = 0x6;
     constexpr static const uint8_t FT6336_CHIPID = 0x64;
-
-    constexpr static const uint8_t DEFAULT_THRESHOLD = 22;
-    struct point final {
-        uint16_t x;
-        uint16_t y;
-    };
+#ifdef ARDUINO
     TwoWire& m_i2c;
-    uint32_t m_last_read_ts;
-    uint8_t m_interval;
-    bool m_initialized=false;
-    point m_points[2];
-    bool m_updated;
-    bool m_changed;
-    uint8_t m_point_count;
-    uint8_t m_point_0_finger;
+#else
+    constexpr static const uint8_t ACK_CHECK_EN = 0x1;
+    constexpr static const uint8_t ACK_CHECK_DIS = 0x0;
+    constexpr static const uint8_t ACK_VAL = 0x0;
+    constexpr static const uint8_t NACK_VAL = 0x1;
+    i2c_port_t m_i2c;
+#endif
     uint8_t m_rotation;
-    uint8_t reg(uint8_t address) const {
-        m_i2c.beginTransmission(ft6336::address);
-        m_i2c.write(address);
-        m_i2c.endTransmission();
-        m_i2c.requestFrom((uint8_t)ft6336::address, uint8_t(1));
-        return m_i2c.read();
-    }
+    bool m_initialized;
+    size_t m_touches;
+    uint16_t m_touches_x[2], m_touches_y[2], m_touches_id[2];
 
-    void reg(uint8_t address, uint8_t value) {
-        m_i2c.beginTransmission(ft6336::address);
-        m_i2c.write(address);
+    ft6336(const ft6336& rhs) = delete;
+    ft6336& operator=(const ft6336& rhs) = delete;
+    void do_move(ft6336& rhs) {
+        m_i2c = rhs.m_i2c;
+        m_rotation = rhs.m_rotation;
+        m_initialized = rhs.m_initialized;
+        m_touches = rhs.m_touches;
+        memcpy(m_touches_x, rhs.m_touches_x, sizeof(m_touches_x));
+        memcpy(m_touches_y, rhs.m_touches_y, sizeof(m_touches_y));
+        memcpy(m_touches_id, rhs.m_touches_id, sizeof(m_touches_id));
+    }
+    int reg(int r) const {
+#ifdef ARDUINO
+        int result = 0;
+        m_i2c.beginTransmission(address);
+        m_i2c.write(r);
+        m_i2c.endTransmission();
+        m_i2c.requestFrom((uint8_t)address, (uint8_t)1);
+        if (m_i2c.available()) {
+            result = m_i2c.read();
+        }
+        return result;
+#else
+        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, address << 1 | I2C_MASTER_WRITE, ACK_CHECK_EN);
+        i2c_master_write_byte(cmd, r, I2C_MASTER_ACK);
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_READ, true);
+        uint8_t result;
+        i2c_master_read_byte(cmd, &result, I2C_MASTER_NACK);
+        i2c_master_stop(cmd);
+        i2c_master_cmd_begin(m_i2c, cmd, pdMS_TO_TICKS(1000));
+        i2c_cmd_link_delete(cmd);
+        return result;
+#endif
+    }
+    void reg(int r, int value) {
+#ifdef ARDUINO
+        m_i2c.beginTransmission(address);
+        m_i2c.write((uint8_t)r);
         m_i2c.write((uint8_t)value);
         m_i2c.endTransmission();
+#else
+        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, address << 1 | I2C_MASTER_WRITE, ACK_CHECK_EN);
+        i2c_master_write_byte(cmd, r, ACK_CHECK_EN);
+        i2c_master_write_byte(cmd, value, ACK_CHECK_EN);
+        i2c_master_stop(cmd);
+        i2c_master_cmd_begin(m_i2c, cmd, pdMS_TO_TICKS(1000));
+        i2c_cmd_link_delete(cmd);
+#endif
     }
-
-    // Reading size bytes into data
-    void reg(uint8_t address, uint8_t size, uint8_t* data) const {
-        m_i2c.beginTransmission((uint8_t)ft6336::address);
-        m_i2c.write(address);
+    void read_all() {
+        uint8_t i2cdat[16];
+#ifdef ARDUINO
+        m_i2c.beginTransmission(address);
+        m_i2c.write((uint8_t)0);
         m_i2c.endTransmission();
-        m_i2c.requestFrom((uint8_t)ft6336::address, size);
-        for (uint8_t i = 0; i < size; i++) data[i] = m_i2c.read();
-    }
-    // TODO: Test this
-    static void translate(point& pt,int rotation) {
-        uint16_t tmp;
-        switch(rotation & 3) {
-            case 0:
-                tmp = pt.x;
-                pt.x = pt.y;
-                pt.y = pt.x;
-                break;
-            case 1:
-                break;
-            case 2:
-                tmp = width-pt.x-1;
-                pt.x = pt.y;
-                pt.y = pt.x;
-                break;
-            case 3:
-                tmp = pt.x;
-                pt.x = height-pt.y-1;
-                pt.y = pt.x;
-            default:
-                break;
-            
+
+        m_i2c.requestFrom((uint8_t)address, (uint8_t)16);
+        for (uint8_t i = 0; i < 16; i++)
+            i2cdat[i] = m_i2c.read();
+#else
+    // Read data
+	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (address<<1), ACK_CHECK_EN);
+    i2c_master_write_byte(cmd, 0, ACK_CHECK_EN);
+    i2c_master_stop(cmd);
+    i2c_master_cmd_begin(m_i2c, cmd, pdMS_TO_TICKS( 1000));
+    i2c_cmd_link_delete(cmd);
+    cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (address<<1)|1, ACK_CHECK_EN);
+    i2c_master_read(cmd, i2cdat, sizeof(i2cdat),  I2C_MASTER_LAST_NACK);
+    i2c_master_stop(cmd);
+    i2c_master_cmd_begin(m_i2c, cmd, pdMS_TO_TICKS(1000));
+    i2c_cmd_link_delete(cmd);
+#endif
+        m_touches = i2cdat[0x02];
+        if (m_touches > 2) {
+            m_touches = 0;
+        }
+
+        for (uint8_t i = 0; i < 2; i++) {
+            m_touches_x[i] = i2cdat[0x03 + i * 6] & 0x0F;
+            m_touches_x[i] <<= 8;
+            m_touches_x[i] |= i2cdat[0x04 + i * 6];
+            m_touches_y[i] = i2cdat[0x05 + i * 6] & 0x0F;
+            m_touches_y[i] <<= 8;
+            m_touches_y[i] |= i2cdat[0x06 + i * 6];
+            m_touches_id[i] = i2cdat[0x05 + i * 6] >> 4;
         }
     }
-   public:
-    constexpr static const uint16_t width = Width;
-    constexpr static const uint16_t height = Height;
-    constexpr static const int8_t pin_int = PinInt;
-    constexpr static const uint8_t address = Address;
-    ft6336(TwoWire& i2c = Wire) : m_i2c(i2c), m_last_read_ts(0), m_interval(0), m_initialized(false), m_updated(false),m_changed(false),m_point_count(0),m_point_0_finger(0),m_rotation(0) {
-        m_points[0].x = m_points[0].y = m_points[1].x = m_points[1].y = 65535;
-    }
-    inline bool initialized() const { return m_initialized; }
-    bool initialize() {
-        if(!m_initialized) {
-            if(pin_int!=-1) {
-                pinMode(pin_int,INPUT_PULLUP);
+    bool read_point(size_t n, uint16_t* out_x, uint16_t* out_y) const {
+        if (m_touches == 0 || n >= m_touches) {
+            if (out_x != nullptr) {
+                *out_x = 0;
             }
-            m_initialized=true;
+            if (out_y != nullptr) {
+                *out_y = 0;
+            }
+            return false;
+        }
+        uint16_t x = m_touches_x[n];
+        uint16_t y = m_touches_y[n];
+        if (x >= native_width) {
+            x = native_width - 1;
+        }
+        if (y >= native_height) {
+            y = native_height - 1;
+        }
+        translate(x, y);
+        if (out_x != nullptr) {
+            *out_x = x;
+        }
+        if (out_y != nullptr) {
+            *out_y = y;
         }
         return true;
     }
-    inline void interrupt_enabled(bool value) {
-        if(value==true && pin_int==-1) return;
-        reg(REG_INTERRUPT_MODE, value);
-    }
-    inline bool interrupt_enabled() const {
-        return reg(REG_INTERRUPT_MODE);
-    }
-    inline void interval(uint8_t ivl) {
-        reg(REG_TOUCHRATE_ACTIVE, ivl);
-        m_interval = interval();
+    void translate(uint16_t& x, uint16_t& y) const {
+        uint16_t tmp;
+        switch (m_rotation & 3) {
+            case 1:
+                tmp = x;
+                x = y;
+                y = native_width - tmp - 1;
+                break;
+            case 2:
+                x = native_width - x - 1;
+                y = native_height - y - 1;
+                break;
+            case 3:
+                tmp = x;
+                x = native_height - y - 1;
+                y = tmp;
+            default:
+                break;
+        }
     }
 
-    inline uint8_t interval() const {
-        return reg(REG_TOUCHRATE_ACTIVE);
+   public:
+    constexpr static const uint16_t native_width = Width;
+    constexpr static const uint16_t native_height = Height;
+    constexpr static const uint8_t threshhold = Threshhold;
+    constexpr static const uint8_t address = Address;
+    ft6336(ft6336&& rhs) {
+        do_move(rhs);
     }
-    inline bool pressed() const {
-        return !digitalRead(pin_int) && m_updated && m_changed;
+    ft6336& operator=(ft6336&& rhs) {
+        do_move(rhs);
+        return *this;
     }
-    inline uint8_t rotation() const {
+    ft6336(
+#ifdef ARDUINO
+        TwoWire& i2c = Wire
+#else
+        i2c_port_t i2c = I2C_NUM_0
+#endif
+        ) : m_i2c(i2c), m_rotation(0), m_touches(0) {
+    }
+
+    bool initialized() const {
+        return m_initialized;
+    }
+    bool initialize() {
+        if (!m_initialized) {
+#ifdef ARDUINO
+            m_i2c.begin();
+#endif
+            reg(TOUCH_REG_THRESHHOLD, threshhold);
+
+            // Check if our chip has the correct Vendor ID
+            /*if (reg(TOUCH_REG_VENDID) != FT6336_VENDID) {
+                return false;
+            }
+            // Check if our chip has the correct Chip ID.
+            uint8_t id = reg(TOUCH_REG_CHIPID);
+            if ((id != FT6336_CHIPID)) {
+                return false;
+            }*/
+            m_touches = 0;
+            m_initialized = true;
+        }
+        return m_initialized;
+    }
+    uint8_t rotation() const {
         return m_rotation;
     }
-    inline void rotation(uint8_t value) {
+    void rotation(uint8_t value) {
         m_rotation = value & 3;
     }
-    bool xy(uint16_t* out_x, uint16_t* out_y) const {
-        if(!m_updated) return false;
-        if(m_point_count>0) {
-            if(out_x!=nullptr) {
-                *out_x = m_points[0].x;
-            }
-            if(out_y!=nullptr) {
-                *out_y = m_points[0].y;
-            }
-            return true;
+    uint16_t width() const {
+        return m_rotation & 1 ? native_height : native_width;
+    }
+    uint16_t height() const {
+        return m_rotation & 1 ? native_width : native_height;
+    }
+    size_t touches() const {
+        uint8_t result = reg(TOUCH_REG_NUMTOUCHES);
+        if (result > 2) {
+            result = 0;
         }
-        return false;
+        return result;
+    }
+    bool xy(uint16_t* out_x, uint16_t* out_y) const {
+        return read_point(0, out_x, out_y);
     }
     bool xy2(uint16_t* out_x, uint16_t* out_y) const {
-        if(!m_updated) return false;
-        if(m_point_count>1) {
-            if(out_x!=nullptr) {
-                *out_x = m_points[1].x;
-            }
-            if(out_y!=nullptr) {
-                *out_y = m_points[1].y;
-            }
-            return true;
-        }
-        return false;
+        return read_point(1, out_x, out_y);
     }
     bool update() {
-        if(!initialize()) {
+        if (!initialize()) {
             return false;
         }
-        if (!m_interval) {
-            m_interval = interval();
-        }
-        m_updated=false;
-        m_changed = false;
-        if (millis() - m_last_read_ts < m_interval) {
-            return false;
-        }
-        m_last_read_ts = millis();
-        point p[2];
-        uint8_t pts = 0;
-        uint8_t p0f = 0;
-        if (!digitalRead(pin_int)) {
-            uint8_t data[11];
-            reg(REG_NUM_TOUCHES, 11, data);
-            pts = data[0];
-            if (pts > 2) return false;
-            if (pts) {
-                // Read the data. Never mind trying to read the "weight" and
-                // "size" properties or using the built-in gestures: they
-                // are always set to zero.
-                p0f = (data[3] >> 4) ? 1 : 0;
-                p[0].x = ((data[1] << 8) | data[2]) & 0x0fff;
-                p[0].y = ((data[3] << 8) | data[4]) & 0x0fff;
-                if (p[0].x >= height || p[0].y >= width) return false;
-                if (pts == 2) {
-                    p[1].x = ((data[7] << 8) | data[8]) & 0x0fff;
-                    p[1].y = ((data[9] << 8) | data[10]) & 0x0fff;
-                    if (p[1].x >= height || p[1].y >= width) return false;
-                }
-            }
-        }
-        translate(p[0],m_rotation);
-        translate(p[1],m_rotation);
-        if (p[0].x != m_points[0].x || p[1].x != m_points[1].x ||
-            p[0].y != m_points[0].y || p[1].y != m_points[1].y) {
-            m_changed = true;
-            m_points[0] = p[0];
-            m_points[1] = p[1];
-            m_point_count = pts;
-            m_point_0_finger = p0f;
-        }
-        m_updated = true;
+        read_all();
         return true;
     }
 };
