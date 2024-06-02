@@ -48,9 +48,13 @@ namespace arduino {
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
-
-#include "driver/gpio.h"
+#include <esp_idf_version.h>
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#include <driver/i2c_master.h>
+#else
 #include "driver/i2c.h"
+#endif
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -78,7 +82,12 @@ class ft6336 final {
     constexpr static const uint8_t ACK_CHECK_DIS = 0x0;
     constexpr static const uint8_t ACK_VAL = 0x0;
     constexpr static const uint8_t NACK_VAL = 0x1;
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    i2c_master_bus_handle_t m_i2c_bus;
+    i2c_master_dev_handle_t m_i2c;
+#else
     i2c_port_t m_i2c;
+#endif
 #endif
     uint8_t m_rotation;
     bool m_initialized;
@@ -108,17 +117,23 @@ class ft6336 final {
         }
         return result;
 #else
+        uint8_t result;
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        result = r;
+        i2c_master_transmit(m_i2c,&result,1,-1);
+        i2c_master_receive(m_i2c,&result,1,-1);
+#else
         i2c_cmd_handle_t cmd = i2c_cmd_link_create();
         i2c_master_start(cmd);
         i2c_master_write_byte(cmd, address << 1 | I2C_MASTER_WRITE, ACK_CHECK_EN);
         i2c_master_write_byte(cmd, r, I2C_MASTER_ACK);
         i2c_master_start(cmd);
         i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_READ, true);
-        uint8_t result;
         i2c_master_read_byte(cmd, &result, I2C_MASTER_NACK);
         i2c_master_stop(cmd);
         i2c_master_cmd_begin(m_i2c, cmd, pdMS_TO_TICKS(1000));
         i2c_cmd_link_delete(cmd);
+#endif
         return result;
 #endif
     }
@@ -129,6 +144,12 @@ class ft6336 final {
         m_i2c.write((uint8_t)value);
         m_i2c.endTransmission();
 #else
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        uint8_t tmp = r;
+        i2c_master_transmit(m_i2c,&tmp,1,-1);
+        tmp = value;
+        i2c_master_transmit(m_i2c,&tmp,1,-1);
+#else
         i2c_cmd_handle_t cmd = i2c_cmd_link_create();
         i2c_master_start(cmd);
         i2c_master_write_byte(cmd, address << 1 | I2C_MASTER_WRITE, ACK_CHECK_EN);
@@ -137,6 +158,7 @@ class ft6336 final {
         i2c_master_stop(cmd);
         i2c_master_cmd_begin(m_i2c, cmd, pdMS_TO_TICKS(1000));
         i2c_cmd_link_delete(cmd);
+#endif
 #endif
     }
     void read_all() {
@@ -150,21 +172,27 @@ class ft6336 final {
         for (uint8_t i = 0; i < 16; i++)
             i2cdat[i] = m_i2c.read();
 #else
-    // Read data
-	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (address<<1), ACK_CHECK_EN);
-    i2c_master_write_byte(cmd, 0, ACK_CHECK_EN);
-    i2c_master_stop(cmd);
-    i2c_master_cmd_begin(m_i2c, cmd, pdMS_TO_TICKS( 1000));
-    i2c_cmd_link_delete(cmd);
-    cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (address<<1)|1, ACK_CHECK_EN);
-    i2c_master_read(cmd, i2cdat, sizeof(i2cdat),  I2C_MASTER_LAST_NACK);
-    i2c_master_stop(cmd);
-    i2c_master_cmd_begin(m_i2c, cmd, pdMS_TO_TICKS(1000));
-    i2c_cmd_link_delete(cmd);
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        uint8_t tmp = 0;
+        i2c_master_transmit(m_i2c,&tmp,1,-1);
+        i2c_master_receive(m_i2c,i2cdat,sizeof(i2cdat),-1);
+#else
+        // Read data
+        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, (address<<1), ACK_CHECK_EN);
+        i2c_master_write_byte(cmd, 0, ACK_CHECK_EN);
+        i2c_master_stop(cmd);
+        i2c_master_cmd_begin(m_i2c, cmd, pdMS_TO_TICKS( 1000));
+        i2c_cmd_link_delete(cmd);
+        cmd = i2c_cmd_link_create();
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, (address<<1)|1, ACK_CHECK_EN);
+        i2c_master_read(cmd, i2cdat, sizeof(i2cdat),  I2C_MASTER_LAST_NACK);
+        i2c_master_stop(cmd);
+        i2c_master_cmd_begin(m_i2c, cmd, pdMS_TO_TICKS(1000));
+        i2c_cmd_link_delete(cmd);
+#endif
 #endif
         m_touches = i2cdat[0x02];
         if (m_touches > 2) {
@@ -245,9 +273,20 @@ class ft6336 final {
 #ifdef ARDUINO
         TwoWire& i2c = Wire
 #else
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        i2c_master_bus_handle_t i2c
+#else
         i2c_port_t i2c = I2C_NUM_0
 #endif
-        ) : m_i2c(i2c), m_rotation(0), m_touches(0) {
+#endif
+        ) : 
+#if defined(ARDUINO) || ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 0, 0)
+        m_i2c(i2c), 
+#else
+        m_i2c_bus(i2c),
+        m_i2c(nullptr),
+#endif
+        m_rotation(0), m_touches(0) {
     }
 
     bool initialized() const {
@@ -257,6 +296,17 @@ class ft6336 final {
         if (!m_initialized) {
 #ifdef ARDUINO
             m_i2c.begin();
+#else
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+            i2c_device_config_t dev_cfg;
+            memset(&dev_cfg,0,sizeof(dev_cfg));
+            dev_cfg.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+            dev_cfg.device_address = address;
+            dev_cfg.scl_speed_hz = 100*1000;
+            if(ESP_OK!=i2c_master_bus_add_device(m_i2c_bus, &dev_cfg, &m_i2c)) {
+                return false;
+            }
+#endif
 #endif
             reg(TOUCH_REG_THRESHHOLD, threshhold);
 
