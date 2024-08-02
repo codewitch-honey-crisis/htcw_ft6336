@@ -62,7 +62,7 @@ namespace arduino {
 namespace esp_idf {
 #endif
 
-template <uint16_t Width, uint16_t Height, uint8_t Threshhold = 128, uint8_t Address = 0x38>
+template <uint16_t Width, uint16_t Height, uint8_t Threshhold = 32, uint8_t Address = 0x38>
 class ft6336 final {
     constexpr static const uint8_t TOUCH_REG_XL = 0x04;
     constexpr static const uint8_t TOUCH_REG_XH = 0x03;
@@ -82,6 +82,9 @@ class ft6336 final {
     constexpr static const uint8_t ACK_CHECK_DIS = 0x0;
     constexpr static const uint8_t ACK_VAL = 0x0;
     constexpr static const uint8_t NACK_VAL = 0x1;
+    static uint32_t millis() {
+        return pdTICKS_TO_MS(xTaskGetTickCount());
+    }
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
     i2c_master_bus_handle_t m_i2c_bus;
     i2c_master_dev_handle_t m_i2c;
@@ -353,7 +356,11 @@ class ft6336 final {
         if (!initialize()) {
             return false;
         }
-        read_all();
+        static uint32_t ts = 0;
+        if(millis()>=ts+13) {
+            ts = millis();
+            read_all();
+        }
         return true;
     }
 };

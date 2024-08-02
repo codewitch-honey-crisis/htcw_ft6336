@@ -1,6 +1,6 @@
 {
     "name": "htcw_ft6336",
-    "version": "0.1.6",
+    "version": "0.1.7",
     "description": "Provides support for the FT6336 capacitive touch panel",
     "keywords": ["touch", "capacitive", "touch-panel", "lcd"],
     "authors": {
